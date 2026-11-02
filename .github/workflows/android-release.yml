@@ -1,0 +1,68 @@
+name: Android CI & APK Release
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      - name: Prepare Debug Keystore if Needed
+        run: |
+          if [ ! -f debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              base64 -d debug.keystore.base64 > debug.keystore
+            else
+              keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+      - name: Run Unit & Robolectric Tests
+        run: gradle :app:testDebugUnitTest
+
+      - name: Build Installable Android APK
+        run: |
+          gradle :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk TicTacToe-v1.0.0.apk
+
+      - name: Upload APK Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TicTacToe-v1.0.0-APK
+          path: TicTacToe-v1.0.0.apk
+
+      - name: Publish GitHub Release on Tag Push
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: TicTacToe-v1.0.0.apk
+          generate_release_notes: true
+          body: |
+            ## Tic Tac Toe — Atelier XO Studio Edition (${{ github.ref_name }})
+            
+            ### Highlights
+            - **Architectural Tactile Design System**: Curated palettes (*Atelier Ivory*, *Nordic Porcelain*, *Kyoto Hinoki*, *Obsidian Studio*).
+            - **Dual AI Systems**: Unbeatable local Minimax Engine with Alpha-Beta Pruning + Live **Gemini AI Tactician** via Firebase AI Logic & App Check with automatic offline fallback.
+            - **Rule Variants**: Classic 3×3 & **Infinity 3-Mark Mode** (no draws — oldest mark vanishes on 4th placement).
+            - **Complete Archive & Replay Inspector**: Persistent Room database match history with step-by-step board replay scrubber.
+            - **Programmatic Acoustic Synthesizer**: 16-bit PCM marimba & ceramic chimes + tactile haptics.

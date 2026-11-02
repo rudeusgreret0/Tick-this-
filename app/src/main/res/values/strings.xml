@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">Tic Tac Toe</string>
+    <string name="studio_subtitle">ATELIER XO • TACTICAL EDITION</string>
+    <string name="nav_home">Arena</string>
+    <string name="nav_play">Board</string>
+    <string name="nav_stats">Records</string>
+    <string name="nav_settings">Studio</string>
+    <string name="mode_pvp_title">Pass &amp; Play Duel</string>
+    <string name="mode_pvp_desc">Two players head-to-head on a shared tactile board.</string>
+    <string name="mode_pvc_title">Local Minimax Engine</string>
+    <string name="mode_pvc_desc">Challenge our deterministic engine across three tactical depths.</string>
+    <string name="mode_gemini_title">Gemini AI Tactician</string>
+    <string name="mode_gemini_desc">Live server-side Gemini reasoning with real-time move commentary.</string>
+    <string name="action_start_match">Launch Match</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_hint">Hint</string>
+    <string name="action_restart">Restart</string>
+    <string name="action_rematch">Rematch</string>
+    <string name="action_switch_sides">Swap X / O</string>
+    <string name="action_clear_history">Clear Match History</string>
+</resources>

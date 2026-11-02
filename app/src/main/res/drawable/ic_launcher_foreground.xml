@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Subtle architectural grid bars inside 66dp safe zone (21..87) -->
+    <path
+        android:fillColor="#3A4559"
+        android:pathData="M51.5,24h5v60h-5zM24,51.5h60v5h-60z" />
+    <!-- Bold sculpted X in top-left quadrant (25..47) in warm Terracotta Vermilion -->
+    <path
+        android:fillColor="#E05A47"
+        android:pathData="M29.5,26L36,32.5L42.5,26L46,29.5L39.5,36L46,42.5L42.5,46L36,39.5L29.5,46L26,42.5L32.5,36L26,29.5Z" />
+    <!-- Bold sculpted O ring in bottom-right quadrant (61..83) in Champagne Gold / Sage Teal -->
+    <path
+        android:fillColor="#3CAEA3"
+        android:pathData="M72,61A11,11 0 1,1 72,83A11,11 0 1,1 72,61ZM72,66A6,6 0 1,0 72,78A6,6 0 1,0 72,66Z" />
+    <!-- Accent Ivory dot in top-right and bottom-left -->
+    <path
+        android:fillColor="#F4EFE6"
+        android:pathData="M72,32A4,4 0 1,1 72,40A4,4 0 1,1 72,32ZM36,68A4,4 0 1,1 36,76A4,4 0 1,1 36,68Z" />
+</vector>
