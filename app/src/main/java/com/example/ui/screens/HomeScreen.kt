@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
@@ -36,7 +37,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -99,37 +100,215 @@ fun HomeScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .widthIn(max = 600.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .widthIn(max = 540.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Studio Header Banner
+            // 1. Top Bar: Player Pill + Theme Switcher
             item {
-                StudioHeroCard(
-                    playerName = preferences.playerOneName,
-                    palette = preferences.studioPalette,
-                    statistics = statistics,
-                    onEditProfile = { showProfileDialog = true },
-                    onCyclePalette = {
-                        val palettes = StudioPalette.entries
-                        val nextIdx = (palettes.indexOf(preferences.studioPalette) + 1) % palettes.size
-                        onCyclePalette(palettes[nextIdx])
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { showProfileDialog = true }
+                            .testTag("edit_profile_chip"),
+                        color = studioColors.surfaceElevated,
+                        shape = RoundedCornerShape(50),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(studioColors.markXContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = preferences.playerOneName.take(1).uppercase(),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = studioColors.markXPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = preferences.playerOneName,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = studioColors.textPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit player names",
+                                tint = studioColors.textMuted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
-                )
+
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable {
+                                val palettes = StudioPalette.entries
+                                val nextIdx = (palettes.indexOf(preferences.studioPalette) + 1) % palettes.size
+                                onCyclePalette(palettes[nextIdx])
+                            }
+                            .testTag("cycle_palette_chip"),
+                        color = studioColors.surfaceElevated,
+                        shape = RoundedCornerShape(50),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = "Switch theme",
+                                tint = studioColors.accentGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = preferences.studioPalette.displayName,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = studioColors.textPrimary
+                            )
+                        }
+                    }
+                }
             }
 
-            // 2. Game Mode Selection
+            // 2. Game Title Showcase Banner
             item {
-                SectionHeader(
-                    eyebrow = "01 • OPPONENT SYSTEM",
-                    title = "Select Match Discipline"
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(
+                            elevation = 6.dp,
+                            shape = RoundedCornerShape(28.dp),
+                            ambientColor = Color.Black.copy(alpha = 0.08f)
+                        ),
+                    shape = RoundedCornerShape(28.dp),
+                    color = studioColors.surfaceElevated,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        StudioEmblemCanvas(modifier = Modifier.size(84.dp))
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Tic Tac Toe",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = studioColors.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Pure strategy • Crafted for touch",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = studioColors.textSecondary
+                        )
+
+                        if (statistics.totalMatches > 0) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(studioColors.surfaceCard)
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = null,
+                                    tint = studioColors.accentGold,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "${statistics.playerOneWins} Wins • ${statistics.winRatePercent}% Win Rate",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = studioColors.textPrimary
+                                )
+                                if (statistics.bestStreak > 1) {
+                                    Text(
+                                        text = "🔥 ${statistics.bestStreak} Streak",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = studioColors.accentGold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Button(
+                            onClick = {
+                                onLaunchMatch(
+                                    selectedMode,
+                                    selectedDifficulty,
+                                    selectedRuleMode,
+                                    selectedMark
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .testTag("launch_match_button"),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = studioColors.markXPrimary,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Play Match",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Game Mode Selection
+            item {
+                Text(
+                    text = "Game Mode",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = studioColors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(10.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ModeSelectionCard(
+                    GameModeTile(
                         mode = GameMode.GEMINI,
+                        title = "Play vs Gemini AI",
+                        subtitle = "Dynamic neural opponent with live move insights",
                         icon = Icons.Default.AutoAwesome,
-                        badge = "FIREBASE AI LOGIC",
                         selected = selectedMode == GameMode.GEMINI,
                         accentColor = studioColors.accentGold,
                         onClick = {
@@ -137,10 +316,11 @@ fun HomeScreen(
                             onSelectMode(GameMode.GEMINI)
                         }
                     )
-                    ModeSelectionCard(
+                    GameModeTile(
                         mode = GameMode.PVC,
+                        title = "Play vs Computer",
+                        subtitle = "Fast offline Minimax tactician",
                         icon = Icons.Default.Memory,
-                        badge = "ALPHA-BETA ENGINE",
                         selected = selectedMode == GameMode.PVC,
                         accentColor = studioColors.markOPrimary,
                         onClick = {
@@ -148,10 +328,11 @@ fun HomeScreen(
                             onSelectMode(GameMode.PVC)
                         }
                     )
-                    ModeSelectionCard(
+                    GameModeTile(
                         mode = GameMode.PVP,
+                        title = "Pass & Play (2 Players)",
+                        subtitle = "${preferences.playerOneName} vs ${preferences.playerTwoName} on one screen",
                         icon = Icons.Default.People,
-                        badge = "LOCAL TABLETOP",
                         selected = selectedMode == GameMode.PVP,
                         accentColor = studioColors.markXPrimary,
                         onClick = {
@@ -162,51 +343,48 @@ fun HomeScreen(
                 }
             }
 
-            // 3. Difficulty Selection (when vs AI)
+            // 4. Difficulty Selection (only when playing vs AI)
             if (selectedMode != GameMode.PVP) {
                 item {
-                    SectionHeader(
-                        eyebrow = "02 • TACTICAL DEPTH",
-                        title = "AI Intelligence Tier"
+                    Text(
+                        text = "AI Difficulty",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = studioColors.textPrimary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(studioColors.surfaceCard)
+                            .padding(5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         AiDifficulty.entries.forEach { diff ->
                             val isSelected = selectedDifficulty == diff
                             Surface(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(14.dp))
                                     .clickable {
                                         selectedDifficulty = diff
                                         onSelectDifficulty(diff)
                                     }
                                     .testTag("difficulty_${diff.id}"),
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isSelected) studioColors.surfaceElevated else studioColors.surfaceCard,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    width = if (isSelected) 2.dp else 1.dp,
-                                    color = if (isSelected) studioColors.accentGold else studioColors.borderSubtle
-                                )
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) studioColors.surfaceElevated else Color.Transparent,
+                                shadowElevation = if (isSelected) 2.dp else 0.dp
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    horizontalAlignment = Alignment.Start
+                                Box(
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = diff.tag,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isSelected) studioColors.accentGold else studioColors.textMuted
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
                                         text = diff.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = studioColors.textPrimary,
-                                        fontWeight = FontWeight.Bold
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (isSelected) studioColors.textPrimary else studioColors.textSecondary,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                     )
                                 }
                             }
@@ -215,13 +393,15 @@ fun HomeScreen(
                 }
             }
 
-            // 4. Rule Variant & Mark Identity Selection
+            // 5. Rules & Your Piece
             item {
-                SectionHeader(
-                    eyebrow = if (selectedMode != GameMode.PVP) "03 • BOARD RULES & ALLEGIANCE" else "02 • BOARD RULES & ALLEGIANCE",
-                    title = "Rule Variant & Piece"
+                Text(
+                    text = "Rules & Piece",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = studioColors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -232,13 +412,13 @@ fun HomeScreen(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .clickable {
                                     selectedRuleMode = rule
                                     onSelectRuleMode(rule)
                                 }
                                 .testTag("rule_${rule.id}"),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(18.dp),
                             color = if (isSelected) studioColors.surfaceElevated else studioColors.surfaceCard,
                             border = androidx.compose.foundation.BorderStroke(
                                 width = if (isSelected) 2.dp else 1.dp,
@@ -252,26 +432,24 @@ fun HomeScreen(
                                             imageVector = Icons.Default.Bolt,
                                             contentDescription = null,
                                             tint = studioColors.accentGold,
-                                            modifier = Modifier.size(14.dp)
+                                            modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                     }
                                     Text(
-                                        text = rule.badge,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isSelected) studioColors.markOPrimary else studioColors.textMuted
+                                        text = rule.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = studioColors.textPrimary,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = rule.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = studioColors.textPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = rule.description,
+                                    text = if (rule == BoardRuleMode.CLASSIC) {
+                                        "Standard 3-in-a-row"
+                                    } else {
+                                        "Max 3 marks each • No draws"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = studioColors.textSecondary
                                 )
@@ -280,16 +458,14 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Mark X vs O Allegiance Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    MarkChoiceCard(
+                    PieceSelectionPill(
                         mark = Mark.X,
-                        subtitle = if (selectedMode == GameMode.PVP) preferences.playerOneName else "First Strike • Vermilion",
                         selected = selectedMark == Mark.X,
                         color = studioColors.markXPrimary,
                         containerColor = studioColors.markXContainer,
@@ -299,9 +475,8 @@ fun HomeScreen(
                         },
                         modifier = Modifier.weight(1f)
                     )
-                    MarkChoiceCard(
+                    PieceSelectionPill(
                         mark = Mark.O,
-                        subtitle = if (selectedMode == GameMode.PVP) preferences.playerTwoName else "Counter Play • Viridian",
                         selected = selectedMark == Mark.O,
                         color = studioColors.markOPrimary,
                         containerColor = studioColors.markOContainer,
@@ -312,42 +487,6 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
-            }
-
-            // 5. Primary Launch Action
-            item {
-                Button(
-                    onClick = {
-                        onLaunchMatch(
-                            selectedMode,
-                            selectedDifficulty,
-                            selectedRuleMode,
-                            selectedMark
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp)
-                        .testTag("launch_match_button"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = studioColors.textPrimary,
-                        contentColor = studioColors.backgroundPrimary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Enter Tactical Board",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }
@@ -366,186 +505,11 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StudioHeroCard(
-    playerName: String,
-    palette: StudioPalette,
-    statistics: StatisticsSummary,
-    onEditProfile: () -> Unit,
-    onCyclePalette: () -> Unit
-) {
-    val studioColors = LocalStudioColors.current
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = studioColors.surfaceElevated,
-        border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    color = studioColors.accentGoldContainer,
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Text(
-                        text = "ATELIER XO • STUDIO",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = studioColors.accentGold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .clickable(onClick = onCyclePalette)
-                            .testTag("cycle_palette_chip"),
-                        color = studioColors.surfaceCard,
-                        shape = RoundedCornerShape(50),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = "Switch studio theme palette",
-                                tint = studioColors.accentGold,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = palette.displayName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = studioColors.textPrimary
-                            )
-                        }
-                    }
-
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .clickable(onClick = onEditProfile)
-                            .testTag("edit_profile_chip"),
-                        color = studioColors.surfaceCard,
-                        shape = RoundedCornerShape(50),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit player profile",
-                                tint = studioColors.textSecondary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = playerName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = studioColors.textPrimary
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Tic Tac Toe",
-                        style = MaterialTheme.typography.displaySmall,
-                        color = studioColors.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Architectural strategy crafted with deterministic Minimax & live Gemini AI.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = studioColors.textSecondary
-                    )
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                StudioEmblemCanvas(
-                    modifier = Modifier.size(72.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Quick Career Telemetry Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(studioColors.surfaceCard)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                QuickStatItem(label = "MATCHES", value = "${statistics.totalMatches}")
-                QuickStatItem(label = "WIN RATE", value = "${statistics.winRatePercent}%")
-                QuickStatItem(label = "BEST STREAK", value = "${statistics.bestStreak}")
-                QuickStatItem(
-                    label = "FASTEST WIN",
-                    value = statistics.fastestWinSeconds?.let { "${it}s" } ?: "—"
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickStatItem(label: String, value: String) {
-    val studioColors = LocalStudioColors.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = studioColors.textMuted
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            color = studioColors.textPrimary,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun SectionHeader(eyebrow: String, title: String) {
-    val studioColors = LocalStudioColors.current
-    Column {
-        Text(
-            text = eyebrow,
-            style = MaterialTheme.typography.labelMedium,
-            color = studioColors.accentGold
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = studioColors.textPrimary
-        )
-    }
-}
-
-@Composable
-private fun ModeSelectionCard(
+private fun GameModeTile(
     mode: GameMode,
+    title: String,
+    subtitle: String,
     icon: ImageVector,
-    badge: String,
     selected: Boolean,
     accentColor: Color,
     onClick: () -> Unit
@@ -554,10 +518,10 @@ private fun ModeSelectionCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .testTag("mode_card_${mode.id}"),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         color = if (selected) studioColors.surfaceElevated else studioColors.surfaceCard,
         border = androidx.compose.foundation.BorderStroke(
             width = if (selected) 2.dp else 1.dp,
@@ -570,7 +534,7 @@ private fun ModeSelectionCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(48.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(accentColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
@@ -584,33 +548,25 @@ private fun ModeSelectionCard(
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = mode.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = studioColors.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = badge,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accentColor
-                    )
-                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = studioColors.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = mode.subtitle,
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = studioColors.textSecondary
                 )
             }
             Box(
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(22.dp)
                     .clip(CircleShape)
                     .border(
-                        width = if (selected) 6.dp else 1.5.dp,
+                        width = if (selected) 7.dp else 1.5.dp,
                         color = if (selected) accentColor else studioColors.gridLine,
                         shape = CircleShape
                     )
@@ -620,9 +576,8 @@ private fun ModeSelectionCard(
 }
 
 @Composable
-private fun MarkChoiceCard(
+private fun PieceSelectionPill(
     mark: Mark,
-    subtitle: String,
     selected: Boolean,
     color: Color,
     containerColor: Color,
@@ -632,10 +587,10 @@ private fun MarkChoiceCard(
     val studioColors = LocalStudioColors.current
     Surface(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .testTag("mark_choice_${mark.symbol}"),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         color = if (selected) containerColor else studioColors.surfaceCard,
         border = androidx.compose.foundation.BorderStroke(
             width = if (selected) 2.dp else 1.dp,
@@ -643,30 +598,23 @@ private fun MarkChoiceCard(
         )
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
             Text(
                 text = mark.symbol,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 color = color,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Play as ${mark.symbol}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = studioColors.textPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = studioColors.textSecondary,
-                    maxLines = 1
-                )
-            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Play as ${mark.symbol}",
+                style = MaterialTheme.typography.titleSmall,
+                color = studioColors.textPrimary,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -685,8 +633,9 @@ fun PlayerProfileDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Player Roster & Callsigns",
-                style = MaterialTheme.typography.titleLarge
+                text = "Player Names",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
@@ -694,7 +643,7 @@ fun PlayerProfileDialog(
                 OutlinedTextField(
                     value = p1,
                     onValueChange = { p1 = it },
-                    label = { Text("Primary Player (Player 1)") },
+                    label = { Text("Player 1") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -703,7 +652,7 @@ fun PlayerProfileDialog(
                 OutlinedTextField(
                     value = p2,
                     onValueChange = { p2 = it },
-                    label = { Text("Challenger (Pass & Play Player 2)") },
+                    label = { Text("Player 2 (Pass & Play)") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -716,7 +665,7 @@ fun PlayerProfileDialog(
                 onClick = { onSave(p1, p2) },
                 modifier = Modifier.testTag("save_profile_button")
             ) {
-                Text("Save Roster")
+                Text("Save")
             }
         },
         dismissButton = {

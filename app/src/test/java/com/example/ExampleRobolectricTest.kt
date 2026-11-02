@@ -3,6 +3,8 @@ package com.example
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.example.audio.SoundAndHapticsManager
 import com.example.data.ai.AiOpponentProvider
+import com.example.data.ai.ApiKeyHealthStatus
+import com.example.data.ai.GeminiKeyManagerRepository
 import com.example.data.ai.GeminiMoveDecision
 import com.example.data.local.MatchDao
 import com.example.data.local.MatchRecordEntity
@@ -24,7 +26,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -121,7 +125,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `gemini ai mode handles fallback gracefully when api error notice occurs`() = runTest(UnconfinedTestDispatcher()) {
+    fun `gemini ai mode handles quota fallback gracefully with compact notice and diagnostics`() = runTest(UnconfinedTestDispatcher()) {
         val fakeDao = FakeMatchDao()
         val matchRepository = MatchRepository(fakeDao)
         val testDataStore = PreferenceDataStoreFactory.create(
@@ -146,10 +150,13 @@ class ExampleRobolectricTest {
                 return GeminiMoveDecision(
                     cellIndex = best.cellIndex,
                     coordinate = best.coordinate,
-                    tacticalCommentary = "${best.tacticalReason} (Local Engine)",
+                    tacticalCommentary = "${best.tacticalReason} (Local Master AI)",
                     confidence = 95,
                     usedLocalFallback = true,
-                    errorNotice = "Network offline — Local Minimax fallback active."
+                    providerLabel = "Local Master AI",
+                    compactNotice = "Gemini quota reached — Local Master AI active",
+                    technicalDiagnostics = "HTTP 429 RESOURCE_EXHAUSTED on project quota.",
+                    canSwitchKey = true
                 )
             }
         }
@@ -178,7 +185,78 @@ class ExampleRobolectricTest {
         assertEquals(Mark.X, state.board[0])
         assertEquals(Mark.O, state.board[4])
         assertTrue(state.usedFallbackInMatch)
-        assertNotNull(state.aiErrorBanner)
+        assertEquals("Gemini quota reached — Local Master AI active", state.aiErrorBanner)
+        assertEquals("HTTP 429 RESOURCE_EXHAUSTED on project quota.", state.aiTechnicalDiagnostics)
+        assertEquals("Local Master AI", state.activeAiProviderLabel)
+    }
+
+    @Test
+    fun `gemini key manager supports adding multiple keys masking switching replacing and deleting`() = runTest(UnconfinedTestDispatcher()) {
+        val keyDataStore = PreferenceDataStoreFactory.create(
+            scope = backgroundScope,
+            produceFile = { tempFolder.newFile("test_key_manager.preferences_pb") }
+        )
+        val keyRepo = GeminiKeyManagerRepository(keyDataStore)
+
+        val rawPrimary = "AIzaSyPrimaryExampleKey987654321"
+        val rawBackup = "AIzaSyBackupExampleKey123456789"
+
+        val primarySaved = keyRepo.addApiKey(
+            label = "Primary Key",
+            rawApiKey = rawPrimary,
+            makeActive = true,
+            initialStatus = ApiKeyHealthStatus.VALID
+        )
+        val backupSaved = keyRepo.addApiKey(
+            label = "Backup Key",
+            rawApiKey = rawBackup,
+            makeActive = false,
+            initialStatus = ApiKeyHealthStatus.UNTESTED
+        )
+
+        // Verify masked preview never exposes full key
+        assertNotEquals(rawPrimary, primarySaved.maskedPreview)
+        assertTrue(primarySaved.maskedPreview.contains("••••••••"))
+        assertTrue(primarySaved.maskedPreview.startsWith("AIza"))
+        assertTrue(primarySaved.maskedPreview.endsWith("4321"))
+
+        // Verify decrypted plaintext matches original
+        val stateAfterAdd = keyRepo.configStateFlow.first()
+        assertEquals(2, stateAfterAdd.savedKeys.size)
+        assertEquals(primarySaved.id, stateAfterAdd.activeKeyId)
+        assertEquals(rawPrimary, keyRepo.getDecryptedActiveKey()?.second)
+
+        // Switch active key to Backup Key
+        keyRepo.selectActiveKey(backupSaved.id)
+        val stateAfterSwitch = keyRepo.configStateFlow.first()
+        assertEquals(backupSaved.id, stateAfterSwitch.activeKeyId)
+        assertEquals(rawBackup, keyRepo.getDecryptedActiveKey()?.second)
+
+        // Replace Primary Key value without deleting Backup Key
+        val replacementSecret = "AIzaSyReplacedPrimaryKey55559999"
+        keyRepo.replaceApiKey(
+            keyId = primarySaved.id,
+            newLabel = "Updated Primary",
+            newRawApiKey = replacementSecret,
+            newStatus = ApiKeyHealthStatus.VALID
+        )
+        val stateAfterReplace = keyRepo.configStateFlow.first()
+        assertEquals(2, stateAfterReplace.savedKeys.size)
+        val updatedPrimary = stateAfterReplace.savedKeys.first { it.id == primarySaved.id }
+        assertEquals("Updated Primary", updatedPrimary.label)
+        assertTrue(updatedPrimary.maskedPreview.endsWith("9999"))
+        assertEquals(replacementSecret, keyRepo.getDecryptedKeyById(primarySaved.id)?.second)
+
+        // Switch back to Cloud Proxy (null)
+        keyRepo.selectActiveKey(null)
+        val stateProxy = keyRepo.configStateFlow.first()
+        assertNull(stateProxy.activeKeyId)
+
+        // Delete Primary Key and verify Backup Key remains intact
+        keyRepo.removeApiKey(primarySaved.id)
+        val stateAfterDelete = keyRepo.configStateFlow.first()
+        assertEquals(1, stateAfterDelete.savedKeys.size)
+        assertEquals(backupSaved.id, stateAfterDelete.savedKeys.first().id)
     }
 
     @Test

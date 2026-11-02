@@ -4,11 +4,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,8 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,11 +25,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,7 +42,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.UserPreferences
@@ -73,10 +79,12 @@ fun GameScreen(
     onSwapMarks: () -> Unit,
     onDismissErrorBanner: () -> Unit,
     onNavigateToArenaSetup: () -> Unit,
+    onOpenApiKeyManager: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val studioColors = LocalStudioColors.current
     val scrollState = rememberScrollState()
+    var showDiagnosticsModal by rememberSaveable { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -88,28 +96,30 @@ fun GameScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .widthIn(max = 560.dp)
+                .widthIn(max = 520.dp)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 18.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 1. Top Match Metadata Bar
-            MatchMetaHeader(
+            // 1. Sleek Top Pill Bar (Opponent Indicator + Setup Button)
+            TopGamePillBar(
                 session = session,
                 onNavigateToArenaSetup = onNavigateToArenaSetup
             )
 
-            // 2. Dual Player Scoreboard
+            // 2. Player vs Player Scoreboard Capsules
             ScoreboardRow(session = session)
 
-            // 3. Gemini AI / Minimax Tactical Telemetry Card
-            TacticalTelemetryBanner(
+            // 3. Compact Status Whisper & Non-Intrusive Quota/Fallback Pill
+            CompactGameStatusBar(
                 session = session,
-                onDismissError = onDismissErrorBanner
+                onDismissError = onDismissErrorBanner,
+                onOpenApiKeyManager = onOpenApiKeyManager,
+                onShowDiagnostics = { showDiagnosticsModal = true }
             )
 
-            // 4. Centerpiece Architectural Game Board
+            // 4. Centerpiece Game Board (Main Visual Attraction)
             TacticalGameBoard(
                 board = session.board,
                 winningLine = session.winningLine,
@@ -122,10 +132,10 @@ fun GameScreen(
                 onCellClick = onCellTap,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 390.dp)
+                    .widthIn(max = 380.dp)
             )
 
-            // 5. Post-Match Celebration Banner OR Tactical Controls
+            // 5. Victory / Defeat / Draw Celebration Sheet
             AnimatedVisibility(
                 visible = session.status != GameStatus.IN_PROGRESS,
                 enter = fadeIn(),
@@ -139,12 +149,12 @@ fun GameScreen(
                 )
             }
 
-            // 6. Tactical Action Deck (Undo, Hint, Swap, Restart)
+            // 6. Clean Bottom Action Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TacticalActionButton(
+                GameActionPill(
                     label = "Undo",
                     icon = Icons.AutoMirrored.Filled.Undo,
                     enabled = session.canUndo,
@@ -152,7 +162,7 @@ fun GameScreen(
                     testTag = "undo_button",
                     modifier = Modifier.weight(1f)
                 )
-                TacticalActionButton(
+                GameActionPill(
                     label = "Hint",
                     icon = Icons.Default.Lightbulb,
                     enabled = session.status == GameStatus.IN_PROGRESS && !session.isAiThinking,
@@ -160,15 +170,15 @@ fun GameScreen(
                     testTag = "hint_button",
                     modifier = Modifier.weight(1f)
                 )
-                TacticalActionButton(
-                    label = "Swap X/O",
+                GameActionPill(
+                    label = "Swap",
                     icon = Icons.Default.SwapHoriz,
                     enabled = !session.isAiThinking,
                     onClick = onSwapMarks,
                     testTag = "swap_sides_button",
                     modifier = Modifier.weight(1f)
                 )
-                TacticalActionButton(
+                GameActionPill(
                     label = "Reset",
                     icon = Icons.Default.Refresh,
                     enabled = !session.isAiThinking,
@@ -177,17 +187,61 @@ fun GameScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
-
-            // 7. Live Move Notation Strip
-            if (session.moveHistory.isNotEmpty()) {
-                MoveSequenceTicker(session = session)
-            }
         }
+    }
+
+    if (showDiagnosticsModal) {
+        AlertDialog(
+            onDismissRequest = { showDiagnosticsModal = false },
+            title = { Text("AI Connection Diagnostics") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Active Engine: ${session.activeAiProviderLabel}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = session.aiErrorBanner ?: "Operating normally.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (!session.aiTechnicalDiagnostics.isNullOrBlank()) {
+                        Surface(
+                            color = studioColors.surfaceCard,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = session.aiTechnicalDiagnostics,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = studioColors.textSecondary,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDiagnosticsModal = false
+                        onOpenApiKeyManager()
+                    }
+                ) {
+                    Text("Open Gemini API Manager")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiagnosticsModal = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
 @Composable
-private fun MatchMetaHeader(
+private fun TopGamePillBar(
     session: GameSessionUiState,
     onNavigateToArenaSetup: () -> Unit
 ) {
@@ -199,21 +253,33 @@ private fun MatchMetaHeader(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Surface(
-                color = studioColors.surfaceCard,
+                color = studioColors.surfaceElevated,
                 shape = RoundedCornerShape(50),
                 border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
             ) {
-                Text(
-                    text = "${session.gameMode.title.uppercase()} • ${
-                        if (session.gameMode == GameMode.PVP) "2P DUEL" else session.difficulty.tag
-                    }",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = studioColors.textPrimary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (session.usedFallbackInMatch) studioColors.markOPrimary
+                                else studioColors.accentGold
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = session.activeAiProviderLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = studioColors.textPrimary
+                    )
+                }
             }
 
             if (session.ruleMode == BoardRuleMode.INFINITY_THREE) {
@@ -222,7 +288,7 @@ private fun MatchMetaHeader(
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(
-                        text = "INFINITY 3-MARK",
+                        text = "3-Mark Infinity",
                         style = MaterialTheme.typography.labelSmall,
                         color = studioColors.accentGold,
                         fontWeight = FontWeight.Bold,
@@ -232,42 +298,29 @@ private fun MatchMetaHeader(
             }
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+            onClick = onNavigateToArenaSetup,
+            shape = RoundedCornerShape(50),
+            color = studioColors.surfaceElevated,
+            border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle),
+            modifier = Modifier.testTag("change_setup_button")
         ) {
-            val minutes = session.elapsedSeconds / 60
-            val seconds = session.elapsedSeconds % 60
-            Text(
-                text = "%02d:%02d".format(minutes, seconds),
-                style = MaterialTheme.typography.labelMedium,
-                color = studioColors.textMuted
-            )
-
-            Surface(
-                onClick = onNavigateToArenaSetup,
-                shape = RoundedCornerShape(50),
-                color = studioColors.surfaceCard,
-                border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle),
-                modifier = Modifier.testTag("change_setup_button")
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "Configure match setup",
-                        tint = studioColors.textSecondary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Setup",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = studioColors.textPrimary
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Tune,
+                    contentDescription = "Change game mode",
+                    tint = studioColors.textSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = "Mode",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = studioColors.textPrimary
+                )
             }
         }
     }
@@ -281,11 +334,10 @@ private fun ScoreboardRow(session: GameSessionUiState) {
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Player X Card
-        PlayerScoreCard(
+        PlayerScoreCapsule(
             mark = Mark.X,
             name = session.playerXName,
             score = session.sessionScoreX,
@@ -298,40 +350,31 @@ private fun ScoreboardRow(session: GameSessionUiState) {
                 .testTag("score_card_X")
         )
 
-        // Center Draws & Streak Pill
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = studioColors.surfaceCard,
             border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "DRAWS",
+                    text = "TIE",
                     style = MaterialTheme.typography.labelSmall,
                     color = studioColors.textMuted
                 )
                 Text(
                     text = "${session.sessionDraws}",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = studioColors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.testTag("draws_score_text")
                 )
-                if (session.sessionStreak > 0) {
-                    Text(
-                        text = "🔥 ${session.sessionStreak}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = studioColors.accentGold
-                    )
-                }
             }
         }
 
-        // Player O Card
-        PlayerScoreCard(
+        PlayerScoreCapsule(
             mark = Mark.O,
             name = session.playerOName,
             score = session.sessionScoreO,
@@ -347,7 +390,7 @@ private fun ScoreboardRow(session: GameSessionUiState) {
 }
 
 @Composable
-private fun PlayerScoreCard(
+private fun PlayerScoreCapsule(
     mark: Mark,
     name: String,
     score: Int,
@@ -372,53 +415,49 @@ private fun PlayerScoreCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(containerColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = mark.symbol,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = accentColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    if (isActiveTurn) {
-                        Text(
-                            text = "TURN",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = accentColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else if (isWinner) {
-                        Text(
-                            text = "WINNER",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = studioColors.accentGold,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(containerColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = mark.symbol,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = accentColor,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = studioColors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = studioColors.textPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = when {
+                            isWinner -> "Winner"
+                            isActiveTurn -> "Playing now"
+                            else -> "Waiting"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isActiveTurn || isWinner) accentColor else studioColors.textMuted
+                    )
+                }
             }
 
             Text(
                 text = "$score",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 color = studioColors.textPrimary,
                 fontWeight = FontWeight.Bold
             )
@@ -427,109 +466,137 @@ private fun PlayerScoreCard(
 }
 
 @Composable
-private fun TacticalTelemetryBanner(
+private fun CompactGameStatusBar(
     session: GameSessionUiState,
-    onDismissError: () -> Unit
+    onDismissError: () -> Unit,
+    onOpenApiKeyManager: () -> Unit,
+    onShowDiagnostics: () -> Unit
 ) {
     val studioColors = LocalStudioColors.current
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Concise 1-line turn / AI insight whisper
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("telemetry_banner"),
-            shape = RoundedCornerShape(16.dp),
-            color = studioColors.surfaceElevated,
-            border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
+            shape = RoundedCornerShape(14.dp),
+            color = studioColors.surfaceCard
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
                 if (session.isAiThinking) {
                     CircularProgressIndicator(
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(15.dp)
                             .testTag("ai_thinking_indicator"),
-                        strokeWidth = 2.2.dp,
+                        strokeWidth = 2.dp,
                         color = studioColors.accentGold
                     )
-                } else {
+                    Spacer(modifier = Modifier.width(8.dp))
+                } else if (session.gameMode != GameMode.PVP) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = null,
                         tint = studioColors.accentGold,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(15.dp)
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
-
-                Spacer(modifier = Modifier.width(10.dp))
 
                 Text(
                     text = session.aiCommentary,
                     style = MaterialTheme.typography.bodySmall,
                     color = studioColors.textPrimary,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
-
-                if (session.aiConfidence != null && !session.isAiThinking) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        color = studioColors.accentGoldContainer,
-                        shape = RoundedCornerShape(50)
-                    ) {
-                        Text(
-                            text = "${session.aiConfidence}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = studioColors.accentGold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-                }
             }
         }
 
-        // Transparent AI Error / Fallback Notice if applicable
+        // Compact, single-line dismissible notification when quota/API issue occurs
         if (session.aiErrorBanner != null) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("ai_error_banner"),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = studioColors.accentGoldContainer,
-                border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.statusWarning)
+                border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.accentGold.copy(alpha = 0.5f))
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.WarningAmber,
-                        contentDescription = null,
-                        tint = studioColors.statusWarning,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = session.aiErrorBanner,
                         style = MaterialTheme.typography.bodySmall,
                         color = studioColors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+
+                    if (session.canSwitchKeyFromBanner) {
+                        Surface(
+                            modifier = Modifier
+                                .padding(horizontal = 4.dp)
+                                .clip(RoundedCornerShape(50))
+                                .clickable(onClick = onOpenApiKeyManager)
+                                .testTag("banner_switch_key_button"),
+                            color = studioColors.surfaceElevated,
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Key,
+                                    contentDescription = null,
+                                    tint = studioColors.accentGold,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Keys",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = studioColors.textPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onShowDiagnostics,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Technical details",
+                            tint = studioColors.textSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
                     IconButton(
                         onClick = onDismissError,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Dismiss AI status notice",
+                            contentDescription = "Dismiss notification",
                             tint = studioColors.textSecondary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
@@ -548,18 +615,18 @@ private fun MatchOutcomeCard(
     val studioColors = LocalStudioColors.current
     val (headline, subtitle, badgeColor) = when (session.status) {
         GameStatus.WON_X -> Triple(
-            "${session.playerXName} (X) Triumphs!",
-            "Decisive alignment in ${session.moveHistory.size} moves (${session.elapsedSeconds}s).",
+            "${session.playerXName} Wins!",
+            "Completed in ${session.moveHistory.size} moves (${session.elapsedSeconds}s)",
             studioColors.markXPrimary
         )
         GameStatus.WON_O -> Triple(
-            "${session.playerOName} (O) Triumphs!",
-            "Decisive alignment in ${session.moveHistory.size} moves (${session.elapsedSeconds}s).",
+            "${session.playerOName} Wins!",
+            "Completed in ${session.moveHistory.size} moves (${session.elapsedSeconds}s)",
             studioColors.markOPrimary
         )
         GameStatus.DRAW -> Triple(
-            "Tactical Stalemate — Draw",
-            "Every lane neutralized across ${session.moveHistory.size} moves.",
+            "It's a Draw!",
+            "Balanced match across ${session.moveHistory.size} moves",
             studioColors.accentGold
         )
         GameStatus.IN_PROGRESS -> Triple("", "", studioColors.accentGold)
@@ -569,7 +636,7 @@ private fun MatchOutcomeCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("match_outcome_card"),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = studioColors.surfaceElevated,
         border = androidx.compose.foundation.BorderStroke(2.dp, badgeColor)
     ) {
@@ -577,28 +644,39 @@ private fun MatchOutcomeCard(
             modifier = Modifier.padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "MATCH CONCLUDED",
-                style = MaterialTheme.typography.labelMedium,
-                color = badgeColor
-            )
-            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(badgeColor.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.EmojiEvents,
+                    contentDescription = null,
+                    tint = badgeColor,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = headline,
                 style = MaterialTheme.typography.headlineSmall,
                 color = studioColors.textPrimary,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = studioColors.textSecondary
+                color = studioColors.textSecondary,
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(14.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = onRematch,
@@ -618,7 +696,7 @@ private fun MatchOutcomeCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Rematch", fontWeight = FontWeight.Bold)
+                    Text("Play Again", fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
@@ -644,7 +722,7 @@ private fun MatchOutcomeCard(
 }
 
 @Composable
-private fun TacticalActionButton(
+private fun GameActionPill(
     label: String,
     icon: ImageVector,
     enabled: Boolean,
@@ -657,7 +735,7 @@ private fun TacticalActionButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
-            .height(50.dp)
+            .height(48.dp)
             .testTag(testTag),
         shape = RoundedCornerShape(14.dp),
         color = if (enabled) studioColors.surfaceElevated else studioColors.surfaceCard.copy(alpha = 0.5f),
@@ -666,7 +744,7 @@ private fun TacticalActionButton(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -683,50 +761,6 @@ private fun TacticalActionButton(
                 color = if (enabled) studioColors.textPrimary else studioColors.textMuted.copy(alpha = 0.45f),
                 maxLines = 1
             )
-        }
-    }
-}
-
-@Composable
-private fun MoveSequenceTicker(session: GameSessionUiState) {
-    val studioColors = LocalStudioColors.current
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        items(session.moveHistory) { move ->
-            val markColor = if (move.mark == Mark.X) studioColors.markXPrimary else studioColors.markOPrimary
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = studioColors.surfaceCard,
-                border = androidx.compose.foundation.BorderStroke(1.dp, studioColors.borderSubtle)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "#${move.moveNumber}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = studioColors.textMuted
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(markColor)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${move.mark.symbol}→${move.coordinate}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = studioColors.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
         }
     }
 }

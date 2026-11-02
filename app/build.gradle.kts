@@ -68,9 +68,6 @@ android {
     includeInApk = false
     includeInBundle = true
   }
-  androidResources {
-    ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:ic_launcher*.webp"
-  }
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files

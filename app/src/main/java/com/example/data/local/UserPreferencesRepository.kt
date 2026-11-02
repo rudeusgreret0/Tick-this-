@@ -32,7 +32,7 @@ data class UserPreferences(
     val musicEnabled: Boolean = false,
     val hapticsEnabled: Boolean = true,
     val animationsEnabled: Boolean = true,
-    val showCoordinates: Boolean = true,
+    val showCoordinates: Boolean = false,
     val studioPalette: StudioPalette = StudioPalette.ATELIER_IVORY,
     val themeModeOverride: ThemeModeOverride = ThemeModeOverride.LIGHT
 )
@@ -73,7 +73,7 @@ class UserPreferencesRepository(private val dataStore: DataStore<Preferences>) {
             musicEnabled = prefs[Keys.MUSIC_ENABLED] ?: false,
             hapticsEnabled = prefs[Keys.HAPTICS_ENABLED] ?: true,
             animationsEnabled = prefs[Keys.ANIMATIONS_ENABLED] ?: true,
-            showCoordinates = prefs[Keys.SHOW_COORDINATES] ?: true,
+            showCoordinates = prefs[Keys.SHOW_COORDINATES] ?: false,
             studioPalette = StudioPalette.fromId(prefs[Keys.STUDIO_PALETTE] ?: StudioPalette.ATELIER_IVORY.id),
             themeModeOverride = ThemeModeOverride.fromId(prefs[Keys.THEME_MODE_OVERRIDE] ?: ThemeModeOverride.LIGHT.id)
         )

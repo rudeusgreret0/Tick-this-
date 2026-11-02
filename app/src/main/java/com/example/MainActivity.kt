@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.audio.SoundAndHapticsManager
+import com.example.data.ai.GeminiKeyManagerRepository
 import com.example.data.local.AppDatabase
 import com.example.data.local.UserPreferencesRepository
 import com.example.data.repository.MatchRepository
@@ -65,10 +66,10 @@ enum class StudioDestination(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    ARENA("arena", "Arena", Icons.Filled.Home, Icons.Outlined.Home),
-    BOARD("board", "Board", Icons.Filled.GridOn, Icons.Outlined.GridOn),
-    RECORDS("records", "Records", Icons.Filled.BarChart, Icons.Outlined.BarChart),
-    STUDIO("studio", "Studio", Icons.Filled.Settings, Icons.Outlined.Settings)
+    ARENA("arena", "Lobby", Icons.Filled.Home, Icons.Outlined.Home),
+    BOARD("board", "Play", Icons.Filled.GridOn, Icons.Outlined.GridOn),
+    RECORDS("records", "Stats", Icons.Filled.BarChart, Icons.Outlined.BarChart),
+    STUDIO("studio", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -86,13 +87,15 @@ class MainActivity : ComponentActivity() {
             val database = remember { AppDatabase.getInstance(appContext) }
             val matchRepository = remember { MatchRepository(database.matchDao()) }
             val preferencesRepository = remember { UserPreferencesRepository(appContext) }
+            val keyManagerRepository = remember { GeminiKeyManagerRepository(appContext) }
             val soundManager = remember { SoundAndHapticsManager(appContext) }
 
             val viewModel: GameViewModel = viewModel(
                 factory = GameViewModel.Factory(
                     matchRepository = matchRepository,
                     preferencesRepository = preferencesRepository,
-                    soundManager = soundManager
+                    soundManager = soundManager,
+                    keyManagerRepository = keyManagerRepository
                 )
             )
 
@@ -110,11 +113,13 @@ fun TicTacToeApp(
     val session by viewModel.session.collectAsStateWithLifecycle()
     val statistics by viewModel.statistics.collectAsStateWithLifecycle()
     val matchHistory by viewModel.matchHistory.collectAsStateWithLifecycle()
+    val apiConfigState by viewModel.apiConfigState.collectAsStateWithLifecycle()
+    val apiKeyManagerUiState by viewModel.apiKeyManagerUiState.collectAsStateWithLifecycle()
 
     var showSplash by rememberSaveable { mutableStateOf(!skipSplashForTesting) }
     var currentDestination by rememberSaveable { mutableStateOf(StudioDestination.ARENA) }
 
-    // Ensure hardware Back button navigates back to Arena from secondary tabs
+    // Ensure hardware Back button navigates back to Lobby from secondary tabs
     BackHandler(enabled = !showSplash && currentDestination != StudioDestination.ARENA) {
         currentDestination = StudioDestination.ARENA
     }
@@ -252,6 +257,9 @@ fun TicTacToeApp(
                                             onDismissErrorBanner = { viewModel.dismissAiErrorBanner() },
                                             onNavigateToArenaSetup = {
                                                 currentDestination = StudioDestination.ARENA
+                                            },
+                                            onOpenApiKeyManager = {
+                                                currentDestination = StudioDestination.STUDIO
                                             }
                                         )
                                     }
@@ -272,6 +280,39 @@ fun TicTacToeApp(
                                     StudioDestination.STUDIO -> {
                                         SettingsScreen(
                                             preferences = preferences,
+                                            apiConfigState = apiConfigState,
+                                            apiKeyManagerUiState = apiKeyManagerUiState,
+                                            onAddApiKey = { label, rawApiKey, makeActive, validateFirst ->
+                                                viewModel.addGeminiApiKey(
+                                                    label = label,
+                                                    rawApiKey = rawApiKey,
+                                                    makeActive = makeActive,
+                                                    validateFirst = validateFirst
+                                                )
+                                            },
+                                            onTestUnsavedApiKey = { rawApiKey ->
+                                                viewModel.testUnsavedApiKeyConnection(rawApiKey)
+                                            },
+                                            onTestSavedApiKey = { keyId ->
+                                                viewModel.testSavedApiKeyConnection(keyId)
+                                            },
+                                            onReplaceSavedApiKey = { keyId, newLabel, newRawApiKey, validateIfNewKeyProvided ->
+                                                viewModel.replaceSavedApiKey(
+                                                    keyId = keyId,
+                                                    newLabel = newLabel,
+                                                    newRawApiKey = newRawApiKey,
+                                                    validateIfNewKeyProvided = validateIfNewKeyProvided
+                                                )
+                                            },
+                                            onDeleteSavedApiKey = { keyId ->
+                                                viewModel.deleteSavedApiKey(keyId)
+                                            },
+                                            onSelectActiveApiKey = { keyId ->
+                                                viewModel.selectActiveApiKey(keyId)
+                                            },
+                                            onClearApiKeyFeedback = {
+                                                viewModel.clearApiKeyManagerFeedback()
+                                            },
                                             onSelectPalette = { viewModel.updateStudioPalette(it) },
                                             onSelectThemeMode = { viewModel.updateThemeModeOverride(it) },
                                             onToggleSound = { viewModel.updateSoundEnabled(it) },

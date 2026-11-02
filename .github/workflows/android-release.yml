@@ -37,13 +37,27 @@ jobs:
             fi
           fi
 
+      - name: Ensure Bundled Typography Assets Exist
+        run: |
+          mkdir -p app/src/main/res/font
+          if [ ! -s app/src/main/res/font/space_grotesk.ttf ]; then
+            curl -fSL "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf" -o app/src/main/res/font/space_grotesk.ttf
+          fi
+          if [ ! -s app/src/main/res/font/plus_jakarta_sans.ttf ]; then
+            curl -fSL "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/PlusJakartaSans%5Bwght%5D.ttf" -o app/src/main/res/font/plus_jakarta_sans.ttf
+          fi
+          if [ ! -s app/src/main/res/font/jetbrains_mono.ttf ]; then
+            curl -fSL "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf" -o app/src/main/res/font/jetbrains_mono.ttf
+          fi
+
       - name: Run Unit & Robolectric Tests
-        run: gradle :app:testDebugUnitTest
+        run: gradle :app:testDebugUnitTest --stacktrace
 
       - name: Build Installable Android APK
         run: |
-          gradle :app:assembleDebug
+          gradle :app:assembleDebug --stacktrace
           cp app/build/outputs/apk/debug/app-debug.apk TicTacToe-v1.0.0.apk
+          ls -lh TicTacToe-v1.0.0.apk
 
       - name: Upload APK Build Artifact
         uses: actions/upload-artifact@v4
@@ -58,11 +72,11 @@ jobs:
           files: TicTacToe-v1.0.0.apk
           generate_release_notes: true
           body: |
-            ## Tic Tac Toe — Atelier XO Studio Edition (${{ github.ref_name }})
+            ## Tic Tac Toe — Atelier XO Edition (${{ github.ref_name }})
             
             ### Highlights
-            - **Architectural Tactile Design System**: Curated palettes (*Atelier Ivory*, *Nordic Porcelain*, *Kyoto Hinoki*, *Obsidian Studio*).
-            - **Dual AI Systems**: Unbeatable local Minimax Engine with Alpha-Beta Pruning + Live **Gemini AI Tactician** via Firebase AI Logic & App Check with automatic offline fallback.
-            - **Rule Variants**: Classic 3×3 & **Infinity 3-Mark Mode** (no draws — oldest mark vanishes on 4th placement).
-            - **Complete Archive & Replay Inspector**: Persistent Room database match history with step-by-step board replay scrubber.
-            - **Programmatic Acoustic Synthesizer**: 16-bit PCM marimba & ceramic chimes + tactile haptics.
+            - **Redesigned Mobile Game Interface**: Clean, tactile 3×3 game board centerpiece with responsive X/O stroke animations, compact player score capsules, and celebratory match result sheets.
+            - **Gemini API Manager**: Add, name, test, switch, replace, and remove multiple personal Gemini API keys with Android Keystore (`AES/GCM/NoPadding`) encryption, masked previews, live status badges (`Valid`, `Quota Exceeded`, `Invalid`), and automatic multi-key + Local Master AI failover.
+            - **Game Modes & Rules**: Pass & Play (2P), Local Master AI (Minimax with Alpha-Beta Pruning), and Gemini AI across both **Classic 3×3** and **Infinity 3-Mark Mode**.
+            - **Match Archive & Replay Inspector**: Persistent Room database match history with step-by-step board replay scrubber.
+            - **Acoustic Chimes & Haptics**: Synthesized 16-bit PCM marimba & ceramic chimes + physical haptic feedback.

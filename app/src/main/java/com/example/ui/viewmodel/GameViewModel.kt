@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.audio.SoundAndHapticsManager
 import com.example.data.ai.AiOpponentProvider
+import com.example.data.ai.ApiKeyHealthStatus
+import com.example.data.ai.GeminiApiConfigState
+import com.example.data.ai.GeminiKeyManagerRepository
 import com.example.data.ai.GeminiOpponentService
 import com.example.data.local.MatchRecordEntity
 import com.example.data.local.UserPreferences
@@ -21,6 +24,7 @@ import com.example.domain.engine.TicTacToeEngine
 import com.example.domain.engine.WinningLine
 import com.example.ui.theme.StudioPalette
 import com.example.ui.theme.ThemeModeOverride
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +61,15 @@ data class StatisticsSummary(
     val pvpMatches: Int = 0
 )
 
+data class ApiKeyManagerUiState(
+    val isTestingConnection: Boolean = false,
+    val testingKeyId: String? = null,
+    val feedbackMessage: String? = null,
+    val isFeedbackError: Boolean = false,
+    val lastTestStatus: ApiKeyHealthStatus? = null,
+    val lastTechnicalDetail: String? = null
+)
+
 data class GameSessionUiState(
     val board: List<Mark?> = List(9) { null },
     val currentTurn: Mark = Mark.X,
@@ -74,9 +87,12 @@ data class GameSessionUiState(
     val hintEvaluation: TacticalMoveEvaluation? = null,
     val nextVanishCellIndex: Int? = null,
     val isAiThinking: Boolean = false,
-    val aiCommentary: String = "Awaiting opening move on the tactical grid.",
+    val activeAiProviderLabel: String = "Gemini AI",
+    val aiCommentary: String = "Tap any cell to begin.",
     val aiConfidence: Int? = null,
     val aiErrorBanner: String? = null,
+    val aiTechnicalDiagnostics: String? = null,
+    val canSwitchKeyFromBanner: Boolean = false,
     val usedFallbackInMatch: Boolean = false,
     val sessionScoreX: Int = 0,
     val sessionScoreO: Int = 0,
@@ -100,12 +116,13 @@ class GameViewModel(
     private val matchRepository: MatchRepository,
     private val preferencesRepository: UserPreferencesRepository,
     private val soundManager: SoundAndHapticsManager,
-    private val aiOpponentProvider: AiOpponentProvider = GeminiOpponentService(),
+    private val keyManagerRepository: GeminiKeyManagerRepository? = null,
+    private val aiOpponentProvider: AiOpponentProvider = GeminiOpponentService(keyManagerRepository),
     private val enableMatchTimer: Boolean = true,
-    coroutineScope: kotlinx.coroutines.CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
-    private val activeScope: kotlinx.coroutines.CoroutineScope = coroutineScope ?: viewModelScope
+    private val activeScope: CoroutineScope = coroutineScope ?: viewModelScope
 
     val preferences: StateFlow<UserPreferences> = preferencesRepository.preferencesFlow
         .stateIn(
@@ -113,6 +130,18 @@ class GameViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = UserPreferences()
         )
+
+    val apiConfigState: StateFlow<GeminiApiConfigState> = (
+        keyManagerRepository?.configStateFlow
+            ?: MutableStateFlow(GeminiApiConfigState())
+        ).stateIn(
+        scope = activeScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = GeminiApiConfigState()
+    )
+
+    private val _apiKeyManagerUiState = MutableStateFlow(ApiKeyManagerUiState())
+    val apiKeyManagerUiState: StateFlow<ApiKeyManagerUiState> = _apiKeyManagerUiState.asStateFlow()
 
     val matchHistory: StateFlow<List<MatchRecordEntity>> = matchRepository.allMatches
         .stateIn(
@@ -157,7 +186,6 @@ class GameViewModel(
                         resetSessionScores = true
                     )
                 } else {
-                    // Keep display names in sync when updated in settings
                     _session.update { state ->
                         val (xName, oName) = resolvePlayerNames(
                             mode = state.gameMode,
@@ -193,10 +221,21 @@ class GameViewModel(
             p2 = playerTwoName
         )
 
+        val activeKeyLabel = apiConfigState.value.activeKey?.label
+        val providerLabel = when (gameMode) {
+            GameMode.PVP -> "2P Local"
+            GameMode.PVC -> "Local AI (${difficulty.title})"
+            GameMode.GEMINI -> if (activeKeyLabel != null) "Gemini ($activeKeyLabel)" else "Gemini AI"
+        }
+
         val defaultCommentary = when (gameMode) {
-            GameMode.PVP -> "Pass & Play duel ready. ${if (firstTurn == Mark.X) xName else oName} opens."
-            GameMode.PVC -> "Minimax Engine (${difficulty.title}) ready. Select any square."
-            GameMode.GEMINI -> "Gemini AI Tactician (${difficulty.title}) connected via Firebase AI Logic."
+            GameMode.PVP -> "${if (firstTurn == Mark.X) xName else oName}'s turn to open."
+            GameMode.PVC -> "Playing vs Local ${difficulty.title} AI."
+            GameMode.GEMINI -> if (activeKeyLabel != null) {
+                "Gemini AI ready using key '$activeKeyLabel'."
+            } else {
+                "Gemini AI ready."
+            }
         }
 
         _session.update { prev ->
@@ -217,9 +256,12 @@ class GameViewModel(
                 hintEvaluation = null,
                 nextVanishCellIndex = null,
                 isAiThinking = false,
+                activeAiProviderLabel = providerLabel,
                 aiCommentary = defaultCommentary,
                 aiConfidence = null,
                 aiErrorBanner = null,
+                aiTechnicalDiagnostics = null,
+                canSwitchKeyFromBanner = false,
                 usedFallbackInMatch = false,
                 sessionScoreX = if (resetSessionScores) 0 else prev.sessionScoreX,
                 sessionScoreO = if (resetSessionScores) 0 else prev.sessionScoreO,
@@ -257,8 +299,11 @@ class GameViewModel(
         isAiMove: Boolean,
         aiComment: String? = null,
         aiConfidenceScore: Int? = null,
+        providerLabel: String? = null,
         usedFallback: Boolean = false,
-        errorBanner: String? = null
+        errorBanner: String? = null,
+        technicalDiagnostics: String? = null,
+        canSwitchKey: Boolean = false
     ) {
         val current = _session.value
         if (!TicTacToeEngine.isValidMove(current.board, cellIndex)) return
@@ -338,9 +383,12 @@ class GameViewModel(
                 hintEvaluation = null,
                 nextVanishCellIndex = nextVanish,
                 isAiThinking = false,
+                activeAiProviderLabel = providerLabel ?: it.activeAiProviderLabel,
                 aiCommentary = moveSummary,
                 aiConfidence = aiConfidenceScore ?: it.aiConfidence,
                 aiErrorBanner = errorBanner ?: if (!isAiMove) it.aiErrorBanner else null,
+                aiTechnicalDiagnostics = technicalDiagnostics ?: if (!isAiMove) it.aiTechnicalDiagnostics else null,
+                canSwitchKeyFromBanner = if (isAiMove) canSwitchKey else it.canSwitchKeyFromBanner,
                 usedFallbackInMatch = it.usedFallbackInMatch || usedFallback,
                 sessionScoreX = updatedScoreX,
                 sessionScoreO = updatedScoreO,
@@ -376,16 +424,15 @@ class GameViewModel(
                 it.copy(
                     isAiThinking = true,
                     aiCommentary = if (state.gameMode == GameMode.GEMINI) {
-                        "Gemini AI Tactician is analyzing grid vectors..."
+                        "Gemini is thinking..."
                     } else {
-                        "Computing Minimax search tree (${state.difficulty.tag})..."
+                        "Computer is thinking..."
                     }
                 )
             }
 
             if (state.gameMode == GameMode.PVC) {
-                // Brief tactile pacing so the human eye perceives the move before response
-                delay(320L)
+                delay(280L)
                 val current = _session.value
                 if (current.status != GameStatus.IN_PROGRESS) return@launch
                 val eval = TicTacToeEngine.findBestMove(
@@ -403,7 +450,8 @@ class GameViewModel(
                         AiDifficulty.EASY -> 68
                         AiDifficulty.MEDIUM -> 85
                         AiDifficulty.HARD -> 99
-                    }
+                    },
+                    providerLabel = "Local ${current.difficulty.title} AI"
                 )
             } else if (state.gameMode == GameMode.GEMINI) {
                 val current = _session.value
@@ -419,8 +467,11 @@ class GameViewModel(
                     isAiMove = true,
                     aiComment = decision.tacticalCommentary,
                     aiConfidenceScore = decision.confidence,
+                    providerLabel = decision.providerLabel,
                     usedFallback = decision.usedLocalFallback,
-                    errorBanner = decision.errorNotice
+                    errorBanner = decision.compactNotice,
+                    technicalDiagnostics = decision.technicalDiagnostics,
+                    canSwitchKey = decision.canSwitchKey
                 )
             }
         }
@@ -432,7 +483,6 @@ class GameViewModel(
         soundManager.playUndoOrHint()
         aiJob?.cancel()
 
-        // In PvC / Gemini mode, if at least 2 snapshots exist, pop back to the human's previous turn
         val stepsToPop = if (state.gameMode != GameMode.PVP && state.undoStack.size >= 2) 2 else 1
         val targetIndex = (state.undoStack.size - stepsToPop).coerceAtLeast(0)
         val restored = state.undoStack[targetIndex]
@@ -456,7 +506,7 @@ class GameViewModel(
                 hintEvaluation = null,
                 nextVanishCellIndex = nextVanish,
                 isAiThinking = false,
-                aiCommentary = "Rewound $stepsToPop move(s). ${restored.currentTurn.symbol} to play."
+                aiCommentary = "Undid move. ${restored.currentTurn.symbol}'s turn."
             )
         }
     }
@@ -475,7 +525,7 @@ class GameViewModel(
         _session.update {
             it.copy(
                 hintEvaluation = evaluation,
-                aiCommentary = "Advisor Hint (${evaluation.coordinate}): ${evaluation.tacticalReason}"
+                aiCommentary = "Suggested move: ${evaluation.coordinate} — ${evaluation.tacticalReason}"
             )
         }
     }
@@ -521,6 +571,277 @@ class GameViewModel(
     fun dismissAiErrorBanner() {
         _session.update { it.copy(aiErrorBanner = null) }
     }
+
+    // =========================================================================
+    // GEMINI API KEY MANAGER ACTIONS
+    // =========================================================================
+
+    fun addGeminiApiKey(
+        label: String,
+        rawApiKey: String,
+        makeActive: Boolean = true,
+        validateFirst: Boolean = true
+    ) {
+        val repo = keyManagerRepository ?: return
+        val cleanKey = rawApiKey.trim()
+        if (cleanKey.isBlank()) {
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    feedbackMessage = "Please enter a Gemini API key before saving.",
+                    isFeedbackError = true
+                )
+            }
+            return
+        }
+
+        soundManager.playButtonTap()
+        activeScope.launch {
+            if (validateFirst) {
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        isTestingConnection = true,
+                        feedbackMessage = "Validating key with Gemini API...",
+                        isFeedbackError = false
+                    )
+                }
+                val outcome = aiOpponentProvider.testApiKey(cleanKey)
+                val shouldActivate = makeActive && (
+                    outcome.status == ApiKeyHealthStatus.VALID ||
+                        outcome.status == ApiKeyHealthStatus.UNTESTED
+                    )
+                val saved = repo.addApiKey(
+                    label = label,
+                    rawApiKey = cleanKey,
+                    makeActive = shouldActivate,
+                    initialStatus = outcome.status,
+                    initialMessage = outcome.userMessage
+                )
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        testingKeyId = null,
+                        feedbackMessage = "Saved '${saved.label}' (${saved.maskedPreview}) • ${outcome.userMessage}",
+                        isFeedbackError = outcome.status == ApiKeyHealthStatus.INVALID,
+                        lastTestStatus = outcome.status,
+                        lastTechnicalDetail = outcome.technicalDetail
+                    )
+                }
+                if (shouldActivate) {
+                    _session.update { s ->
+                        s.copy(
+                            activeAiProviderLabel = "Gemini (${saved.label})",
+                            aiErrorBanner = null
+                        )
+                    }
+                }
+            } else {
+                val saved = repo.addApiKey(
+                    label = label,
+                    rawApiKey = cleanKey,
+                    makeActive = makeActive
+                )
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        feedbackMessage = "Saved '${saved.label}' (${saved.maskedPreview}).",
+                        isFeedbackError = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun testUnsavedApiKeyConnection(rawApiKey: String) {
+        val cleanKey = rawApiKey.trim()
+        if (cleanKey.isBlank()) {
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    feedbackMessage = "Enter an API key first to test connection.",
+                    isFeedbackError = true
+                )
+            }
+            return
+        }
+        soundManager.playButtonTap()
+        activeScope.launch {
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    isTestingConnection = true,
+                    testingKeyId = null,
+                    feedbackMessage = "Testing connection to Gemini API...",
+                    isFeedbackError = false
+                )
+            }
+            val outcome = aiOpponentProvider.testApiKey(cleanKey)
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    isTestingConnection = false,
+                    feedbackMessage = outcome.userMessage,
+                    isFeedbackError = outcome.status != ApiKeyHealthStatus.VALID,
+                    lastTestStatus = outcome.status,
+                    lastTechnicalDetail = outcome.technicalDetail
+                )
+            }
+        }
+    }
+
+    fun testSavedApiKeyConnection(keyId: String) {
+        val repo = keyManagerRepository ?: return
+        soundManager.playButtonTap()
+        activeScope.launch {
+            val pair = repo.getDecryptedKeyById(keyId)
+            if (pair == null) {
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        feedbackMessage = "Could not read saved key configuration.",
+                        isFeedbackError = true
+                    )
+                }
+                return@launch
+            }
+            val (savedMeta, rawKey) = pair
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    isTestingConnection = true,
+                    testingKeyId = keyId,
+                    feedbackMessage = "Testing '${savedMeta.label}'...",
+                    isFeedbackError = false
+                )
+            }
+            val outcome = aiOpponentProvider.testApiKey(rawKey)
+            repo.updateKeyStatus(
+                keyId = keyId,
+                status = outcome.status,
+                statusMessage = outcome.userMessage
+            )
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    isTestingConnection = false,
+                    testingKeyId = null,
+                    feedbackMessage = "${savedMeta.label}: ${outcome.userMessage}",
+                    isFeedbackError = outcome.status != ApiKeyHealthStatus.VALID,
+                    lastTestStatus = outcome.status,
+                    lastTechnicalDetail = outcome.technicalDetail
+                )
+            }
+        }
+    }
+
+    fun replaceSavedApiKey(
+        keyId: String,
+        newLabel: String,
+        newRawApiKey: String?,
+        validateIfNewKeyProvided: Boolean = true
+    ) {
+        val repo = keyManagerRepository ?: return
+        soundManager.playButtonTap()
+        activeScope.launch {
+            val cleanNewKey = newRawApiKey?.trim().orEmpty()
+            if (cleanNewKey.isNotEmpty() && validateIfNewKeyProvided) {
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        isTestingConnection = true,
+                        testingKeyId = keyId,
+                        feedbackMessage = "Validating replacement key...",
+                        isFeedbackError = false
+                    )
+                }
+                val outcome = aiOpponentProvider.testApiKey(cleanNewKey)
+                val updated = repo.replaceApiKey(
+                    keyId = keyId,
+                    newLabel = newLabel,
+                    newRawApiKey = cleanNewKey,
+                    newStatus = outcome.status,
+                    newStatusMessage = outcome.userMessage
+                )
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        testingKeyId = null,
+                        feedbackMessage = if (updated != null) {
+                            "Updated '${updated.label}' (${updated.maskedPreview}) • ${outcome.userMessage}"
+                        } else {
+                            "Could not update key."
+                        },
+                        isFeedbackError = outcome.status == ApiKeyHealthStatus.INVALID,
+                        lastTestStatus = outcome.status,
+                        lastTechnicalDetail = outcome.technicalDetail
+                    )
+                }
+            } else {
+                val updated = repo.replaceApiKey(
+                    keyId = keyId,
+                    newLabel = newLabel,
+                    newRawApiKey = cleanNewKey.takeIf { it.isNotEmpty() }
+                )
+                _apiKeyManagerUiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        testingKeyId = null,
+                        feedbackMessage = if (updated != null) {
+                            "Updated '${updated.label}'."
+                        } else {
+                            "Could not update key."
+                        },
+                        isFeedbackError = updated == null
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteSavedApiKey(keyId: String) {
+        val repo = keyManagerRepository ?: return
+        soundManager.playButtonTap()
+        activeScope.launch {
+            val existingLabel = apiConfigState.value.savedKeys.firstOrNull { it.id == keyId }?.label ?: "API key"
+            repo.removeApiKey(keyId)
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    feedbackMessage = "Removed '$existingLabel'.",
+                    isFeedbackError = false
+                )
+            }
+        }
+    }
+
+    fun selectActiveApiKey(keyId: String?) {
+        val repo = keyManagerRepository ?: return
+        soundManager.playButtonTap()
+        activeScope.launch {
+            repo.selectActiveKey(keyId)
+            val selectedKey = apiConfigState.value.savedKeys.firstOrNull { it.id == keyId }
+            val providerName = if (selectedKey != null) {
+                "Gemini (${selectedKey.label})"
+            } else {
+                "Gemini AI (Server Proxy)"
+            }
+            _session.update {
+                it.copy(
+                    activeAiProviderLabel = providerName,
+                    aiErrorBanner = null
+                )
+            }
+            _apiKeyManagerUiState.update {
+                it.copy(
+                    feedbackMessage = if (selectedKey != null) {
+                        "Switched active key to '${selectedKey.label}' (${selectedKey.maskedPreview})."
+                    } else {
+                        "Switched to built-in Server-Side Firebase AI Logic proxy."
+                    },
+                    isFeedbackError = false
+                )
+            }
+        }
+    }
+
+    fun clearApiKeyManagerFeedback() {
+        _apiKeyManagerUiState.update { it.copy(feedbackMessage = null) }
+    }
+
+    // =========================================================================
+    // ARCHIVES & SETTINGS ACTIONS
+    // =========================================================================
 
     fun inspectMatchReplay(match: MatchRecordEntity?) {
         soundManager.playButtonTap()
@@ -569,7 +890,6 @@ class GameViewModel(
         }
     }
 
-    // Settings updates
     fun updatePlayerNames(playerOne: String, playerTwo: String) {
         activeScope.launch {
             preferencesRepository.updatePlayerNames(playerOne, playerTwo)
@@ -694,7 +1014,7 @@ class GameViewModel(
         }
         val winCsv = winningLine?.indices?.joinToString(",") ?: ""
 
-        viewModelScope.launch {
+        activeScope.launch {
             matchRepository.recordMatch(
                 MatchRecordEntity(
                     timestamp = System.currentTimeMillis(),
@@ -727,11 +1047,11 @@ class GameViewModel(
         return when (mode) {
             GameMode.PVP -> cleanP1 to cleanP2
             GameMode.PVC -> {
-                val aiLabel = "Minimax (${difficulty.title})"
+                val aiLabel = "${difficulty.title} AI"
                 if (humanMark == Mark.X) cleanP1 to aiLabel else aiLabel to cleanP1
             }
             GameMode.GEMINI -> {
-                val aiLabel = "Gemini AI (${difficulty.title})"
+                val aiLabel = "Gemini AI"
                 if (humanMark == Mark.X) cleanP1 to aiLabel else aiLabel to cleanP1
             }
         }
@@ -744,14 +1064,14 @@ class GameViewModel(
         newStatus: GameStatus
     ): String {
         return when (newStatus) {
-            GameStatus.WON_X, GameStatus.WON_O -> "${mark.symbol} completes the winning alignment via $coord!"
-            GameStatus.DRAW -> "Final square $coord locked — tactical equilibrium (Draw)."
+            GameStatus.WON_X, GameStatus.WON_O -> "${mark.symbol} wins with $coord!"
+            GameStatus.DRAW -> "Draw game."
             GameStatus.IN_PROGRESS -> {
                 if (vanishedIndex != null) {
                     val vanishedCoord = TicTacToeEngine.coordinateForIndex(vanishedIndex)
-                    "${mark.symbol} claimed $coord (oldest mark at $vanishedCoord vanished)."
+                    "${mark.symbol} played $coord ($vanishedCoord vanished)."
                 } else {
-                    "${mark.symbol} anchored $coord."
+                    "${mark.symbol} played $coord."
                 }
             }
         }
@@ -771,7 +1091,6 @@ class GameViewModel(
 
         val winRate = ((playerOneWins.toFloat() / total.toFloat()) * 100f).toInt()
 
-        // Chronological order for streak computation
         val chronological = matches.sortedBy { it.timestamp }
         var curStreak = 0
         var maxStreak = 0
@@ -818,7 +1137,8 @@ class GameViewModel(
         private val matchRepository: MatchRepository,
         private val preferencesRepository: UserPreferencesRepository,
         private val soundManager: SoundAndHapticsManager,
-        private val aiOpponentProvider: AiOpponentProvider = GeminiOpponentService()
+        private val keyManagerRepository: GeminiKeyManagerRepository? = null,
+        private val aiOpponentProvider: AiOpponentProvider = GeminiOpponentService(keyManagerRepository)
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -826,6 +1146,7 @@ class GameViewModel(
                 matchRepository = matchRepository,
                 preferencesRepository = preferencesRepository,
                 soundManager = soundManager,
+                keyManagerRepository = keyManagerRepository,
                 aiOpponentProvider = aiOpponentProvider
             ) as T
         }
